@@ -82,12 +82,12 @@ Now you need to configure your Lambda function. On the next pane down, "Environm
 
 We are going to add several Environment variables, so just click the Add button as needed to create the following six Key/Value pairs:
 
-ACCESSKEYID - %The access key id from your User created in Step 2 %
-SECRETACCESSKEY - %The secret access key from your User created in Step 2 %
-REGION - %The Region your S3 bucket was created in, e.g. us-west-2 %
-UPLOADBUCKET - % The Bucket Name, e.g. blackmagic-file-upload-bucket %
-UPLOADFOLDER - % The name of the path under the Bucket you want the files to go in, e.g. uploads/ The trailing slash is required. %
-FILENAMESEP - % The seperator string of your choice. This will be used between the random six characters and the original filename for the uploaded object (see examples in the README.md), e.g. ---- %
+    ACCESSKEYID - %The access key id from your User created in Step 2 %
+    SECRETACCESSKEY - %The secret access key from your User created in Step 2 %
+    REGION - %The Region your S3 bucket was created in, e.g. us-west-2 %
+    UPLOADBUCKET - % The Bucket Name, e.g. blackmagic-file-upload-bucket %
+    UPLOADFOLDER - % The name of the path under the Bucket you want the files to go in, e.g. uploads/ The trailing slash is required. %
+    FILENAMESEP - % The seperator string of your choice. This will be used between the random six characters and the original filename for the uploaded object (see examples in the README.md), e.g. ---- %
 
 5. ## Create API Gateway
 
@@ -141,5 +141,9 @@ If you clone this repo you can just use the upload.html and upload.js files as a
 Then load the upload.html file in your web browser. Click "Choose File", select a file, and then click the "Upload" button.
 
 If all goes well you should see a green progress bar (which might move too fast to see if you are uploading a small file), and then an "Upload Complete!" success message when the upload is done.
+
+In your S3 Bucket you should see the upload folder name you configured in step 4. Like this:
+
+![Uploaded Files](https://p198.p4.n0.cdn.getcloudapp.com/items/P8uyvZQg/by%20default%202020-09-26%20at%204.21.18%20PM.png?v=5ce689a6a4400e9647e7d80fbfbf5ea2 "Uploaded Files")
 
 Congratulations!!
