@@ -1,11 +1,3 @@
-.bg-image {
-
-	background-color: #f8f9fa;
-	background-position: 0 50%;
-	background-size: contain;
-}
-
-
 body {
 	font-family: "Nunito Sans", -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 	font-size: 1rem;
@@ -15,24 +7,11 @@ body {
 	text-align: left;
 }
 
-
-div.block.block-rounded div.block-content p {
-	color: #111111;
-}
-
-#page-footer {
-	color: #222222;
-}
-
-
 #progressBar
 {
 	width:0px;
 	height:5px;
 	background-color:darkgreen;
-	/* position:fixed;
-	top:0px;
-	left:0px; */
 	display:none;
 }
 
@@ -40,11 +19,6 @@ div.block.block-rounded div.block-content p {
 {
 	display:block;
 	margin-bottom: 5px;
-	/* transition: 3s linear width;
-	-webkit-transition: 3s linear width;
-	-moz-transition: 3s linear width;
-	-o-transition: 3s linear width;
-	-ms-transition: 3s linear width; */
 }
 
 #fileUploadMessage {
@@ -55,5 +29,12 @@ div.block.block-rounded div.block-content p {
 #fileUploadMessage.active {
 	display:block;
 	color: black;
-	
+}
+
+.form-group .col-12 {
+	color: black;
+}
+
+#cancelButton {
+	display: none;
 }

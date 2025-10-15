@@ -1,98 +1,177 @@
-jQuery(document).ready(function () {
-  var pbar = $("#progressBar"),
-    currentProgress = 0;
+document.addEventListener('DOMContentLoaded', function () {
+  const pbar = document.getElementById('progressBar');
+  const fileInput = document.getElementById('file');
+  const messageDiv = document.getElementById('fileUploadMessage');
+  const uploadForm = document.getElementById('fileUploadForm');
+  const uploadButton = document.getElementById('uploadButton');
+  const cancelButton = document.getElementById('cancelButton');
+  let currentProgress = 0;
+  let originalButtonText = uploadButton.textContent;
+  let currentXHR = null; // Store reference to current upload request
+
   function trackUploadProgress(e) {
     if (e.lengthComputable) {
       currentProgress = (e.loaded / e.total) * 100; // Amount uploaded in percent
-      $(pbar).width(currentProgress + "%");
-
-      if (currentProgress == 100) console.log("Progress : 100%");
+      pbar.style.width = currentProgress + '%';
+      pbar.setAttribute('aria-valuenow', Math.round(currentProgress));
     }
   }
 
-  function getUploadURL(filename, filetype) {
-    console.log("getUploadURL start!");
-    var getUploadURLURL = "$$AWS API GATEWAY URL GOES HERE$$";
-    var completeURL =
-      getUploadURLURL + "?fileName=" + filename + "&contentType=" + filetype;
-    var uploadURL;
+  async function getUploadURL(filename, filetype) {
+    const getUploadURLURL = CONFIG.apiEndpoint;
 
-    jQuery.ajax({
-      url: completeURL,
-      async: false,
-      type: "GET",
-      dataType: "json",
-      success: function (data) {
-        console.log(data);
-        uploadURL = data.uploadURL;
-        filename = data.filename;
-        console.log("filename: " + filename);
-        console.log("uploadURL: " + uploadURL);
-      },
-      error: function (data) {
-        console.log("could not get upload URL");
-      },
+    // Properly encode URL parameters
+    const params = new URLSearchParams({
+      fileName: filename,
+      contentType: filetype
     });
-    return uploadURL;
+    const completeURL = getUploadURLURL + '?' + params.toString();
+
+    try {
+      const response = await fetch(completeURL, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      return {
+        uploadURL: data.uploadURL,
+        filename: data.filename
+      };
+    } catch (error) {
+      console.error('Could not get upload URL:', error);
+      return null;
+    }
   }
 
-  function sendFile(e) {
+  function showError(message) {
+    messageDiv.classList.add('active');
+    messageDiv.textContent = message;
+    pbar.style.width = '0';
+    pbar.classList.remove('active');
+    uploadButton.disabled = false;
+    uploadButton.textContent = originalButtonText;
+    cancelButton.style.display = 'none';
+    currentXHR = null;
+  }
+
+  function showSuccess(message) {
+    messageDiv.classList.add('active');
+    messageDiv.textContent = message;
+    uploadButton.disabled = false;
+    uploadButton.textContent = originalButtonText;
+    cancelButton.style.display = 'none';
+    currentXHR = null;
+  }
+
+  function cancelUpload() {
+    if (currentXHR) {
+      currentXHR.abort();
+      showError('Upload cancelled by user.');
+    }
+  }
+
+  async function sendFile(e) {
     e.preventDefault();
-    $("#fileUploadMessage").removeClass("active");
-    $(pbar).width(0).addClass("active");
-    // get the reference to the actual file in the input
-    var theFormFile = $("#file").get()[0].files[0];
+    messageDiv.classList.remove('active');
+    pbar.style.width = '0';
+    pbar.classList.add('active');
 
-    var filename = theFormFile.name;
-    console.log("filename: " + filename);
+    // Get the reference to the actual file in the input
+    const theFormFile = fileInput.files[0];
 
-    var filetype = theFormFile.type;
-    console.log("filetype: " + filetype);
+    // Validate file exists
+    if (!theFormFile) {
+      showError('Please select a file to upload.');
+      return false;
+    }
 
-    var uploadURL = getUploadURL(filename, filetype);
+    // Disable button and show loading state
+    uploadButton.disabled = true;
+    uploadButton.textContent = 'Uploading...';
+    cancelButton.style.display = 'inline-block';
 
-    console.log("uploadURL: " + uploadURL);
+    const filename = theFormFile.name;
+    const filetype = theFormFile.type || 'application/octet-stream';
 
-    $.ajax({
-      type: "PUT",
-      url: uploadURL,
-      // Content type must much with the parameter you signed your URL with
-      contentType: filetype,
-      // this flag is important, if not set, it will try to send data as a form
-      processData: false,
-      // the actual file is sent raw
-      data: theFormFile,
-      xhr: function () {
-        // Custom XMLHttpRequest
-        var appXhr = $.ajaxSettings.xhr();
+    // Validate file size using configured maximum
+    const maxSize = CONFIG.maxFileSizeBytes;
+    if (theFormFile.size > maxSize) {
+      const maxSizeMB = Math.round(maxSize / (1024 * 1024));
+      showError(`File is too large. Maximum file size is ${maxSizeMB}MB.`);
+      return false;
+    }
 
-        // Check if upload property exists, if "yes" then upload progress can be tracked otherwise "not"
-        if (appXhr.upload) {
-          // Attach a function to handle the progress of the upload
-          appXhr.upload.addEventListener(
-            "progress",
-            trackUploadProgress,
-            false
-          );
+    // Get upload URL from Lambda
+    const urlData = await getUploadURL(filename, filetype);
+
+    // Validate upload URL was received
+    if (!urlData || !urlData.uploadURL) {
+      showError('Failed to get upload URL from server. Please try again.');
+      return false;
+    }
+
+    const uploadURL = urlData.uploadURL;
+
+    // Upload file to S3 using pre-signed URL
+    try {
+      currentXHR = new XMLHttpRequest();
+
+      // Set up progress tracking
+      currentXHR.upload.addEventListener('progress', trackUploadProgress, false);
+
+      // Set up completion handler
+      currentXHR.onload = function () {
+        if (currentXHR.status >= 200 && currentXHR.status < 300) {
+          showSuccess('Upload Complete!');
+        } else {
+          let errorMsg;
+          if (currentXHR.status === 403) {
+            errorMsg = 'Upload Failed! Pre-signed URL may have expired. Please try again.';
+          } else {
+            errorMsg = 'Upload Failed! ' + currentXHR.statusText;
+          }
+          showError(errorMsg);
+          console.error('Upload error:', currentXHR.status, currentXHR.statusText);
         }
-        return appXhr;
-      },
-      success: function () {
-        // alert('File uploaded');
-        $("#fileUploadMessage").addClass("active");
-        $("#fileUploadMessage").html("Upload Complete!");
-      },
-      error: function (data) {
-        //alert('File NOT uploaded');
-        $("#fileUploadMessage").addClass("active");
-        $("#fileUploadMessage").html("Upload Failed!");
-        console.log(data);
-      },
-    });
+      };
+
+      // Set up error handler
+      currentXHR.onerror = function () {
+        showError('Upload Failed! Network error or CORS issue.');
+        console.error('Upload network error');
+      };
+
+      // Set up abort handler
+      currentXHR.onabort = function () {
+        // showError already called by cancelUpload()
+      };
+
+      // Send the file
+      currentXHR.open('PUT', uploadURL);
+      if (filetype) {
+        currentXHR.setRequestHeader('Content-Type', filetype);
+      }
+      currentXHR.send(theFormFile);
+
+    } catch (error) {
+      showError('Upload Failed! ' + error.message);
+      console.error('Upload error:', error);
+    }
+
     return false;
   }
 
-  $(function () {
-    $("#fileUploadForm").on("submit", sendFile);
-  });
+  // Attach form submit handler
+  uploadForm.addEventListener('submit', sendFile);
+
+  // Attach cancel button handler
+  cancelButton.addEventListener('click', cancelUpload);
 });
