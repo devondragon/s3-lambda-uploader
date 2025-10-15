@@ -26,7 +26,7 @@ const getUploadURL = async function (event, context) {
   let randomString = actionId.substr(actionId.length - 6);
 
   if (
-    typeof event.queryStringParameters !== "undefined" ||
+    typeof event.queryStringParameters !== "undefined" &&
     event.queryStringParameters != null
   ) {
     var contentType = event.queryStringParameters.contentType;
