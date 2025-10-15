@@ -92,14 +92,14 @@ const getUploadURL = async function (event, context) {
     let fileNameSep = process.env.FILENAMESEP;
 
     if (
-      typeof contentType == "undefined" ||
-      contentType == null ||
-      contentType == ""
+      typeof contentType === "undefined" ||
+      contentType === null ||
+      contentType === ""
     ) {
       contentType = "application/octet-stream";
     }
 
-    if (typeof fileName == "undefined" || fileName == null || fileName == "") {
+    if (typeof fileName === "undefined" || fileName === null || fileName === "") {
       fileName = actionId;
     } else {
       // Sanitize the filename to prevent security issues
