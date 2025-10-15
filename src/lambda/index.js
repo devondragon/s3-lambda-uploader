@@ -70,50 +70,51 @@ exports.handler = async (event, context) => {
 };
 
 const getUploadURL = async function (event, context) {
-  console.log(event);
-  console.log("getUploadURL started");
-  let actionId = context.awsRequestId;
-  let randomString = actionId.substr(actionId.length - 6);
+  try {
+    console.log(event);
+    console.log("getUploadURL started");
+    let actionId = context.awsRequestId;
+    let randomString = actionId.substr(actionId.length - 6);
 
-  if (
-    typeof event.queryStringParameters !== "undefined" &&
-    event.queryStringParameters != null
-  ) {
-    var contentType = event.queryStringParameters.contentType;
-    var fileName = event.queryStringParameters.fileName;
-  }
-  let fileNameSep = process.env.FILENAMESEP;
-
-  if (
-    typeof contentType == "undefined" ||
-    contentType == null ||
-    contentType == ""
-  ) {
-    contentType = "application/octet-stream";
-  }
-
-  if (typeof fileName == "undefined" || fileName == null || fileName == "") {
-    fileName = actionId;
-  } else {
-    // Sanitize the filename to prevent security issues
-    const sanitized = sanitizeFilename(fileName);
-    if (!sanitized) {
-      fileName = actionId; // Fall back to actionId if sanitization results in empty string
-    } else {
-      fileName = randomString + fileNameSep + sanitized;
+    if (
+      typeof event.queryStringParameters !== "undefined" &&
+      event.queryStringParameters != null
+    ) {
+      var contentType = event.queryStringParameters.contentType;
+      var fileName = event.queryStringParameters.fileName;
     }
-  }
+    let fileNameSep = process.env.FILENAMESEP;
 
-  var s3Params = {
-    Bucket: uploadBucket,
-    Key: uploadFolder + `${fileName}`,
-    ContentType: `${contentType}`,
-  };
+    if (
+      typeof contentType == "undefined" ||
+      contentType == null ||
+      contentType == ""
+    ) {
+      contentType = "application/octet-stream";
+    }
 
-  return new Promise((resolve, reject) => {
-    // Get signed URL
+    if (typeof fileName == "undefined" || fileName == null || fileName == "") {
+      fileName = actionId;
+    } else {
+      // Sanitize the filename to prevent security issues
+      const sanitized = sanitizeFilename(fileName);
+      if (!sanitized) {
+        fileName = actionId; // Fall back to actionId if sanitization results in empty string
+      } else {
+        fileName = randomString + fileNameSep + sanitized;
+      }
+    }
+
+    var s3Params = {
+      Bucket: uploadBucket,
+      Key: uploadFolder + `${fileName}`,
+      ContentType: `${contentType}`,
+    };
+
+    // Get signed URL - this can throw errors
     let uploadURL = s3.getSignedUrl("putObject", s3Params);
-    resolve({
+
+    return {
       statusCode: 200,
       isBase64Encoded: false,
       headers: {
@@ -123,6 +124,19 @@ const getUploadURL = async function (event, context) {
         uploadURL: uploadURL,
         filename: `${fileName}`,
       }),
-    });
-  });
+    };
+  } catch (error) {
+    console.error("Error generating upload URL:", error);
+    return {
+      statusCode: 500,
+      isBase64Encoded: false,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+      },
+      body: JSON.stringify({
+        error: "Failed to generate upload URL",
+        message: error.message,
+      }),
+    };
+  }
 };
