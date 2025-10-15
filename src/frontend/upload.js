@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (e.lengthComputable) {
       currentProgress = (e.loaded / e.total) * 100; // Amount uploaded in percent
       pbar.style.width = currentProgress + '%';
+      pbar.setAttribute('aria-valuenow', Math.round(currentProgress));
 
       if (currentProgress === 100) console.log('Progress: 100%');
     }
