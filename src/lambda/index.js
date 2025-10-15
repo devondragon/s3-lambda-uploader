@@ -80,7 +80,7 @@ const getUploadURL = async function (event, context) {
     console.log(event);
     console.log("getUploadURL started");
     let actionId = context.awsRequestId;
-    let randomString = actionId.substr(actionId.length - 6);
+    let randomString = actionId.slice(-6); // Get last 6 characters
 
     if (
       typeof event.queryStringParameters !== "undefined" &&
