@@ -14,14 +14,11 @@ document.addEventListener('DOMContentLoaded', function () {
       currentProgress = (e.loaded / e.total) * 100; // Amount uploaded in percent
       pbar.style.width = currentProgress + '%';
       pbar.setAttribute('aria-valuenow', Math.round(currentProgress));
-
-      if (currentProgress === 100) console.log('Progress: 100%');
     }
   }
 
   async function getUploadURL(filename, filetype) {
-    console.log('getUploadURL start!');
-    const getUploadURLURL = '$$AWS API GATEWAY URL GOES HERE$$';
+    const getUploadURLURL = CONFIG.apiEndpoint;
 
     // Properly encode URL parameters
     const params = new URLSearchParams({
@@ -43,9 +40,6 @@ document.addEventListener('DOMContentLoaded', function () {
       }
 
       const data = await response.json();
-      console.log(data);
-      console.log('filename: ' + data.filename);
-      console.log('uploadURL: ' + data.uploadURL);
 
       return {
         uploadURL: data.uploadURL,
@@ -105,20 +99,15 @@ document.addEventListener('DOMContentLoaded', function () {
     cancelButton.style.display = 'inline-block';
 
     const filename = theFormFile.name;
-    console.log('filename: ' + filename);
+    const filetype = theFormFile.type || 'application/octet-stream';
 
-    const filetype = theFormFile.type;
-    console.log('filetype: ' + filetype);
-
-    // Validate file size (100MB max)
-    const maxSize = 100 * 1024 * 1024; // 100MB in bytes
+    // Validate file size using configured maximum
+    const maxSize = CONFIG.maxFileSizeBytes;
     if (theFormFile.size > maxSize) {
-      showError('File is too large. Maximum file size is 100MB.');
+      const maxSizeMB = Math.round(maxSize / (1024 * 1024));
+      showError(`File is too large. Maximum file size is ${maxSizeMB}MB.`);
       return false;
     }
-
-    // Log file size for debugging
-    console.log('filesize: ' + (theFormFile.size / 1024 / 1024).toFixed(2) + 'MB');
 
     // Get upload URL from Lambda
     const urlData = await getUploadURL(filename, filetype);
@@ -130,7 +119,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     const uploadURL = urlData.uploadURL;
-    console.log('uploadURL: ' + uploadURL);
 
     // Upload file to S3 using pre-signed URL
     try {
@@ -163,13 +151,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // Set up abort handler
       currentXHR.onabort = function () {
-        console.log('Upload aborted');
         // showError already called by cancelUpload()
       };
 
       // Send the file
       currentXHR.open('PUT', uploadURL);
-      currentXHR.setRequestHeader('Content-Type', filetype);
+      if (filetype) {
+        currentXHR.setRequestHeader('Content-Type', filetype);
+      }
       currentXHR.send(theFormFile);
 
     } catch (error) {
