@@ -5,18 +5,26 @@ const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 // Initialize S3 client with credentials
 // Note: Best practice is to use IAM roles instead of hardcoded credentials
-const s3Client = new S3Client({
+const clientConfig = {
   region: process.env.REGION || "us-west-2",
-  credentials: {
+};
+
+if (process.env.ACCESSKEYID && process.env.SECRETACCESSKEY) {
+  clientConfig.credentials = {
     accessKeyId: process.env.ACCESSKEYID,
     secretAccessKey: process.env.SECRETACCESSKEY,
-  },
-});
+  };
+}
 
+const s3Client = new S3Client(clientConfig);
+
+// Configuration constants
 const uploadBucket = process.env.UPLOADBUCKET;
 const uploadFolder = process.env.UPLOADFOLDER;
 // CORS origin - defaults to "*" for backward compatibility, but should be set to specific domain
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
+const PRE_SIGNED_URL_EXPIRATION_SECONDS = 300; // 5 minutes
+const RANDOM_PREFIX_LENGTH = 6; // Number of characters from requestId for filename prefix
 
 // Validate required environment variables
 const validateEnvironment = () => {
@@ -44,21 +52,36 @@ const sanitizeFilename = (filename) => {
 
   // Limit length to 255 characters (common filesystem limit)
   if (sanitized.length > 255) {
-    const ext = sanitized.substring(sanitized.lastIndexOf('.'));
-    sanitized = sanitized.substring(0, 255 - ext.length) + ext;
+    const lastDotIndex = sanitized.lastIndexOf('.');
+    if (lastDotIndex > 0) {
+      const ext = sanitized.substring(lastDotIndex);
+      sanitized = sanitized.substring(0, 255 - ext.length) + ext;
+    } else {
+      sanitized = sanitized.substring(0, 255);
+    }
   }
 
   return sanitized || null;
 };
 
 exports.handler = async (event, context) => {
-  console.log(event);
+  // Handle CORS preflight requests
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 204,
+      headers: {
+        "Access-Control-Allow-Origin": allowedOrigin,
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Accept",
+      },
+      body: ''
+    };
+  }
 
   // Validate environment on cold start
   try {
     validateEnvironment();
   } catch (error) {
-    console.error('Environment validation failed:', error);
     return {
       statusCode: 500,
       headers: {
@@ -71,16 +94,13 @@ exports.handler = async (event, context) => {
   }
 
   const result = await getUploadURL(event, context);
-  console.log("Result: ", result);
   return result;
 };
 
 const getUploadURL = async function (event, context) {
   try {
-    console.log(event);
-    console.log("getUploadURL started");
     let actionId = context.awsRequestId;
-    let randomString = actionId.slice(-6); // Get last 6 characters
+    let randomString = actionId.slice(-RANDOM_PREFIX_LENGTH);
 
     let contentType;
     let fileName;
@@ -121,8 +141,10 @@ const getUploadURL = async function (event, context) {
       ContentType: `${contentType}`,
     });
 
-    // Generate pre-signed URL with 5 minute expiration
-    let uploadURL = await getSignedUrl(s3Client, command, { expiresIn: 300 });
+    // Generate pre-signed URL
+    let uploadURL = await getSignedUrl(s3Client, command, {
+      expiresIn: PRE_SIGNED_URL_EXPIRATION_SECONDS
+    });
 
     return {
       statusCode: 200,
@@ -136,7 +158,9 @@ const getUploadURL = async function (event, context) {
       }),
     };
   } catch (error) {
+    // Log detailed error for debugging (server-side only)
     console.error("Error generating upload URL:", error);
+    // Return generic error message to client (don't leak internal details)
     return {
       statusCode: 500,
       isBase64Encoded: false,
@@ -144,8 +168,7 @@ const getUploadURL = async function (event, context) {
         "Access-Control-Allow-Origin": allowedOrigin,
       },
       body: JSON.stringify({
-        error: "Failed to generate upload URL",
-        message: error.message,
+        error: "Failed to generate upload URL. Please try again later.",
       }),
     };
   }
