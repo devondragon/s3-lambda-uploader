@@ -36,12 +36,25 @@ jQuery(document).ready(function () {
     return uploadURL;
   }
 
+  function showError(message) {
+    $("#fileUploadMessage").addClass("active");
+    $("#fileUploadMessage").html(message);
+    $(pbar).width(0).removeClass("active");
+  }
+
   function sendFile(e) {
     e.preventDefault();
     $("#fileUploadMessage").removeClass("active");
     $(pbar).width(0).addClass("active");
+
     // get the reference to the actual file in the input
     var theFormFile = $("#file").get()[0].files[0];
+
+    // Validate file exists
+    if (!theFormFile) {
+      showError("Please select a file to upload.");
+      return false;
+    }
 
     var filename = theFormFile.name;
     console.log("filename: " + filename);
@@ -49,7 +62,23 @@ jQuery(document).ready(function () {
     var filetype = theFormFile.type;
     console.log("filetype: " + filetype);
 
+    // Validate file size (100MB max)
+    var maxSize = 100 * 1024 * 1024; // 100MB in bytes
+    if (theFormFile.size > maxSize) {
+      showError("File is too large. Maximum file size is 100MB.");
+      return false;
+    }
+
+    // Log file size for debugging
+    console.log("filesize: " + (theFormFile.size / 1024 / 1024).toFixed(2) + "MB");
+
     var uploadURL = getUploadURL(filename, filetype);
+
+    // Validate upload URL was received
+    if (!uploadURL) {
+      showError("Failed to get upload URL from server. Please try again.");
+      return false;
+    }
 
     console.log("uploadURL: " + uploadURL);
 
@@ -82,11 +111,17 @@ jQuery(document).ready(function () {
         $("#fileUploadMessage").addClass("active");
         $("#fileUploadMessage").html("Upload Complete!");
       },
-      error: function (data) {
-        //alert('File NOT uploaded');
-        $("#fileUploadMessage").addClass("active");
-        $("#fileUploadMessage").html("Upload Failed!");
-        console.log(data);
+      error: function (xhr, status, error) {
+        var errorMsg = "Upload Failed!";
+        if (xhr.status === 403) {
+          errorMsg = "Upload Failed! Pre-signed URL may have expired. Please try again.";
+        } else if (xhr.status === 0) {
+          errorMsg = "Upload Failed! Network error or CORS issue.";
+        } else if (xhr.responseText) {
+          errorMsg = "Upload Failed! " + xhr.statusText;
+        }
+        showError(errorMsg);
+        console.log("Upload error:", status, error, xhr);
       },
     });
     return false;
