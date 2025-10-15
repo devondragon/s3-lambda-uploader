@@ -47,5 +47,12 @@ div.block.block-rounded div.block-content p {
 #fileUploadMessage.active {
 	display:block;
 	color: black;
-	
+}
+
+.form-group .col-12 {
+	color: black;
+}
+
+#cancelButton {
+	display: none;
 }
