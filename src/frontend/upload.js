@@ -3,7 +3,9 @@ document.addEventListener('DOMContentLoaded', function () {
   const fileInput = document.getElementById('file');
   const messageDiv = document.getElementById('fileUploadMessage');
   const uploadForm = document.getElementById('fileUploadForm');
+  const uploadButton = document.getElementById('uploadButton');
   let currentProgress = 0;
+  let originalButtonText = uploadButton.textContent;
 
   function trackUploadProgress(e) {
     if (e.lengthComputable) {
@@ -57,11 +59,15 @@ document.addEventListener('DOMContentLoaded', function () {
     messageDiv.innerHTML = message;
     pbar.style.width = '0';
     pbar.classList.remove('active');
+    uploadButton.disabled = false;
+    uploadButton.textContent = originalButtonText;
   }
 
   function showSuccess(message) {
     messageDiv.classList.add('active');
     messageDiv.innerHTML = message;
+    uploadButton.disabled = false;
+    uploadButton.textContent = originalButtonText;
   }
 
   async function sendFile(e) {
@@ -78,6 +84,10 @@ document.addEventListener('DOMContentLoaded', function () {
       showError('Please select a file to upload.');
       return false;
     }
+
+    // Disable button and show loading state
+    uploadButton.disabled = true;
+    uploadButton.textContent = 'Uploading...';
 
     const filename = theFormFile.name;
     console.log('filename: ' + filename);
