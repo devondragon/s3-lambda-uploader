@@ -4,8 +4,10 @@ document.addEventListener('DOMContentLoaded', function () {
   const messageDiv = document.getElementById('fileUploadMessage');
   const uploadForm = document.getElementById('fileUploadForm');
   const uploadButton = document.getElementById('uploadButton');
+  const cancelButton = document.getElementById('cancelButton');
   let currentProgress = 0;
   let originalButtonText = uploadButton.textContent;
+  let currentXHR = null; // Store reference to current upload request
 
   function trackUploadProgress(e) {
     if (e.lengthComputable) {
@@ -61,6 +63,8 @@ document.addEventListener('DOMContentLoaded', function () {
     pbar.classList.remove('active');
     uploadButton.disabled = false;
     uploadButton.textContent = originalButtonText;
+    cancelButton.style.display = 'none';
+    currentXHR = null;
   }
 
   function showSuccess(message) {
@@ -68,6 +72,15 @@ document.addEventListener('DOMContentLoaded', function () {
     messageDiv.innerHTML = message;
     uploadButton.disabled = false;
     uploadButton.textContent = originalButtonText;
+    cancelButton.style.display = 'none';
+    currentXHR = null;
+  }
+
+  function cancelUpload() {
+    if (currentXHR) {
+      currentXHR.abort();
+      showError('Upload cancelled by user.');
+    }
   }
 
   async function sendFile(e) {
@@ -88,6 +101,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Disable button and show loading state
     uploadButton.disabled = true;
     uploadButton.textContent = 'Uploading...';
+    cancelButton.style.display = 'inline-block';
 
     const filename = theFormFile.name;
     console.log('filename: ' + filename);
@@ -119,37 +133,43 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Upload file to S3 using pre-signed URL
     try {
-      const xhr = new XMLHttpRequest();
+      currentXHR = new XMLHttpRequest();
 
       // Set up progress tracking
-      xhr.upload.addEventListener('progress', trackUploadProgress, false);
+      currentXHR.upload.addEventListener('progress', trackUploadProgress, false);
 
       // Set up completion handler
-      xhr.onload = function () {
-        if (xhr.status >= 200 && xhr.status < 300) {
+      currentXHR.onload = function () {
+        if (currentXHR.status >= 200 && currentXHR.status < 300) {
           showSuccess('Upload Complete!');
         } else {
           let errorMsg = 'Upload Failed!';
-          if (xhr.status === 403) {
+          if (currentXHR.status === 403) {
             errorMsg = 'Upload Failed! Pre-signed URL may have expired. Please try again.';
           } else {
-            errorMsg = 'Upload Failed! ' + xhr.statusText;
+            errorMsg = 'Upload Failed! ' + currentXHR.statusText;
           }
           showError(errorMsg);
-          console.error('Upload error:', xhr.status, xhr.statusText);
+          console.error('Upload error:', currentXHR.status, currentXHR.statusText);
         }
       };
 
       // Set up error handler
-      xhr.onerror = function () {
+      currentXHR.onerror = function () {
         showError('Upload Failed! Network error or CORS issue.');
         console.error('Upload network error');
       };
 
+      // Set up abort handler
+      currentXHR.onabort = function () {
+        console.log('Upload aborted');
+        // showError already called by cancelUpload()
+      };
+
       // Send the file
-      xhr.open('PUT', uploadURL);
-      xhr.setRequestHeader('Content-Type', filetype);
-      xhr.send(theFormFile);
+      currentXHR.open('PUT', uploadURL);
+      currentXHR.setRequestHeader('Content-Type', filetype);
+      currentXHR.send(theFormFile);
 
     } catch (error) {
       showError('Upload Failed! ' + error.message);
@@ -161,4 +181,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Attach form submit handler
   uploadForm.addEventListener('submit', sendFile);
+
+  // Attach cancel button handler
+  cancelButton.addEventListener('click', cancelUpload);
 });
