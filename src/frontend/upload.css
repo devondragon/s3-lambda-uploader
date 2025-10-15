@@ -30,9 +30,6 @@ div.block.block-rounded div.block-content p {
 	width:0px;
 	height:5px;
 	background-color:darkgreen;
-	/* position:fixed;
-	top:0px;
-	left:0px; */
 	display:none;
 }
 
@@ -40,11 +37,6 @@ div.block.block-rounded div.block-content p {
 {
 	display:block;
 	margin-bottom: 5px;
-	/* transition: 3s linear width;
-	-webkit-transition: 3s linear width;
-	-moz-transition: 3s linear width;
-	-o-transition: 3s linear width;
-	-ms-transition: 3s linear width; */
 }
 
 #fileUploadMessage {
