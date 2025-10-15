@@ -109,9 +109,10 @@ const getUploadURL = async function (event, context) {
       Bucket: uploadBucket,
       Key: uploadFolder + `${fileName}`,
       ContentType: `${contentType}`,
+      Expires: 300, // URL expires in 5 minutes (300 seconds)
     };
 
-    // Get signed URL - this can throw errors
+    // Get signed URL with expiration - this can throw errors
     let uploadURL = s3.getSignedUrl("putObject", s3Params);
 
     return {
