@@ -105,24 +105,17 @@ const getUploadURL = async function (event, context) {
     let contentType;
     let fileName;
 
-    if (
-      typeof event.queryStringParameters !== "undefined" &&
-      event.queryStringParameters != null
-    ) {
+    if (event.queryStringParameters) {
       contentType = event.queryStringParameters.contentType;
       fileName = event.queryStringParameters.fileName;
     }
     let fileNameSep = process.env.FILENAMESEP;
 
-    if (
-      typeof contentType === "undefined" ||
-      contentType === null ||
-      contentType === ""
-    ) {
+    if (!contentType) {
       contentType = "application/octet-stream";
     }
 
-    if (typeof fileName === "undefined" || fileName === null || fileName === "") {
+    if (!fileName) {
       fileName = actionId;
     } else {
       // Sanitize the filename to prevent security issues

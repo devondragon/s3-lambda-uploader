@@ -132,7 +132,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (currentXHR.status >= 200 && currentXHR.status < 300) {
           showSuccess('Upload Complete!');
         } else {
-          let errorMsg = 'Upload Failed!';
+          let errorMsg;
           if (currentXHR.status === 403) {
             errorMsg = 'Upload Failed! Pre-signed URL may have expired. Please try again.';
           } else {
