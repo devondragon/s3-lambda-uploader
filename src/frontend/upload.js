@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function showError(message) {
     messageDiv.classList.add('active');
-    messageDiv.innerHTML = message;
+    messageDiv.textContent = message;
     pbar.style.width = '0';
     pbar.classList.remove('active');
     uploadButton.disabled = false;
@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function showSuccess(message) {
     messageDiv.classList.add('active');
-    messageDiv.innerHTML = message;
+    messageDiv.textContent = message;
     uploadButton.disabled = false;
     uploadButton.textContent = originalButtonText;
     cancelButton.style.display = 'none';
