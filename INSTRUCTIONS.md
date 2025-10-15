@@ -1,149 +1,404 @@
-# Instructions
+# Setup Instructions
 
-This may look like a lot, but it's actually very simple and should only take a couple minutes start to finish!
+This comprehensive guide will walk you through deploying the S3 Lambda Uploader. While it may look lengthy, each step is straightforward and the entire process typically takes 10-15 minutes.
 
-1. ## Create S3 Bucket
+## Overview
 
-Create a new AWS S3 bucket with the name and region of your choice. In this tutorial we will be using the name "blackmagic-file-upload-bucket" and working in the US West 2 Region (Oregon).
+You'll be setting up:
+1. S3 bucket for file storage
+2. IAM user or role for S3 access
+3. Lambda function to generate pre-signed URLs
+4. API Gateway to expose Lambda to browsers
+5. Frontend configuration to connect everything
 
-You can set whatever options you want for your use. You don't need to set any of them for this to work however.
+---
 
-For permissions, the default of "Block all public access" is fine and the most secure. If you need to provide public access to your bucket for specific reasons, go ahead.
+## Step 1: Create S3 Bucket
 
-Click "Create Bucket".
+### Create the Bucket
 
-Now select your newly created Bucket from the list of Buckets. Now click the "Permissions" tab, and then the "CORS configuration" sub-tab under that pane.
+1. Navigate to **S3** in the AWS Console
+2. Click **Create bucket**
+3. Choose a unique bucket name (e.g., `my-file-upload-bucket`)
+4. Select your preferred region (e.g., `us-west-2`)
+5. **Permissions**: Keep the default "Block all public access" for security
+6. Click **Create bucket**
 
-Paste in the following:
+### Configure CORS
 
-    <?xml version="1.0" encoding="UTF-8"?>
-        <CORSConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
-        <CORSRule>
-    		<AllowedOrigin>*</AllowedOrigin>
-    		<AllowedMethod>PUT</AllowedMethod>
-    		<MaxAgeSeconds>30000</MaxAgeSeconds>
-    		<AllowedHeader>*</AllowedHeader>
-    	</CORSRule>
-    	</CORSConfiguration>
+The bucket needs CORS configured to allow direct uploads from browsers.
 
-And click "Save".
+1. Select your newly created bucket
+2. Go to the **Permissions** tab
+3. Scroll down to **Cross-origin resource sharing (CORS)**
+4. Click **Edit** and paste the following JSON:
 
-2. ## Create IAM User
+```json
+[
+  {
+    "AllowedHeaders": ["*"],
+    "AllowedMethods": ["PUT"],
+    "AllowedOrigins": ["*"],
+    "ExposeHeaders": []
+  }
+]
+```
 
-Now we need to create an IAM User with permissions to access that new S3 bucket. This User's credentials will be used by the Lambda function to access S3 and generate the upload URL.
+5. Click **Save changes**
 
-Go into IAM, Users, and click Add User. Name the User whatever you like. In this tutorial we will be using the name "file-upload-user". Under Access Type you will need to select "Programmatic access".
+> **Production Note**: For production, replace `"*"` in `AllowedOrigins` with your specific domain(s), e.g., `["https://example.com", "https://www.example.com"]`
 
-You don't need to add the User to any Groups, although you can for your own management needs.
+---
 
-However you do need to set the access policy. Select the "Attach existing policies directly" tab, and then click on the "Create policy" button.
+## Step 2: Create IAM Policy and User
 
-Under Service, select "S3".
+The Lambda function needs permissions to access S3. You have two options:
 
-Under Actions, under "Read" select "GetObject" and under "Write" select "PutObject".
+### Option A: IAM User with Access Keys (Simpler)
+Use this if you're just getting started or want explicit credential control.
 
-Under Resources put in your Bucket Name, and under Object name, select "Any" or put in "\*".
+### Option B: IAM Role (Recommended for Production)
+Use Lambda execution roles instead of hardcoded credentials. More secure but requires additional IAM knowledge.
+
+**This guide covers Option A. For Option B, see AWS documentation on Lambda execution roles.**
 
-If you select the "JSON" tab you should see JSON that looks like this:
+### Create the IAM Policy
 
-![IAM User Policy JSON](https://p198.p4.n0.cdn.getcloudapp.com/items/nOunE6p7/by%20default%202020-09-26%20at%203.15.27%20PM.png?v=6707ea4113794dbc723bd8d9b800dd6d "JSON")
+1. Navigate to **IAM** → **Policies** in the AWS Console
+2. Click **Create policy**
+3. Select the **JSON** tab
+4. Paste the following policy (replace `YOUR-BUCKET-NAME` with your actual bucket name):
 
-Click "Review Policy" and give the Policy a Name. In this tutorial we will be using the name "file-upload-policy". Then click "Create Policy".
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject"
+      ],
+      "Resource": "arn:aws:s3:::YOUR-BUCKET-NAME/*"
+    }
+  ]
+}
+```
+
+5. Click **Next**
+6. Name the policy (e.g., `s3-upload-policy`)
+7. Click **Create policy**
+
+### Create the IAM User
+
+1. Navigate to **IAM** → **Users**
+2. Click **Create user**
+3. Enter a username (e.g., `file-upload-user`)
+4. Click **Next**
+5. Select **Attach policies directly**
+6. Search for and select the policy you just created (`s3-upload-policy`)
+7. Click **Next**, then **Create user**
 
-You may need to click the Refresh button back on the Add User page, and then search for the policy name you just created, and select the checkbox next to it, before clicking the "Next: Tags" button.
+### Create Access Keys
+
+1. Click on your newly created user
+2. Go to the **Security credentials** tab
+3. Scroll to **Access keys** and click **Create access key**
+4. Select **Application running outside AWS**
+5. Click **Next**, then **Create access key**
+6. **Important**: Copy both the **Access key ID** and **Secret access key**
+7. Store them securely - you'll need them in Step 4
+
+> **Security Best Practice**: Never commit these credentials to version control. Use environment variables or AWS Secrets Manager in production.
+
+---
+
+## Step 3: Create Lambda Function
+
+### Create the Function
+
+1. Navigate to **Lambda** in the AWS Console
+2. Click **Create function**
+3. Select **Author from scratch**
+4. Configure the function:
+   - **Function name**: `file-upload-function` (or your preferred name)
+   - **Runtime**: Select **Node.js 20.x** (or latest available)
+   - **Architecture**: x86_64 (default)
+5. Under **Permissions**, leave default settings (creates a new execution role)
+6. Click **Create function**
 
-You don't need to add any Tags to the User, although you can for your own management needs.
+### Add the Lambda Code
 
-The Review should look like this:
+1. In the **Code** tab, you'll see the inline code editor
+2. Delete the default code in `index.js`
+3. Copy the contents from this repository's Lambda function:
+   - Visit: [https://raw.githubusercontent.com/devondragon/s3-lambda-uploader/main/src/lambda/index.js](https://raw.githubusercontent.com/devondragon/s3-lambda-uploader/main/src/lambda/index.js)
+   - Copy all the code
+4. Paste it into the Lambda code editor
+5. Click **Deploy** to save the changes
 
-![IAM New User Review](https://p198.p4.n0.cdn.getcloudapp.com/items/jkuDr2yo/by%20default%202020-09-26%20at%203.22.31%20PM.png?v=eac377df9261840785a472cb9dc95fab "User Review")
+> **Note**: The Lambda function uses AWS SDK v3, which is included in the Node.js 18+ runtime. No dependencies need to be installed.
 
-Now click "Create User".
+---
+
+## Step 4: Configure Lambda Environment Variables
+
+The Lambda function reads its configuration from environment variables.
+
+1. In your Lambda function, scroll down to **Configuration** tab
+2. Click **Environment variables** in the left sidebar
+3. Click **Edit**
+4. Add the following environment variables by clicking **Add environment variable** for each:
+
+| Key | Value | Example | Required |
+|-----|-------|---------|----------|
+| `UPLOADBUCKET` | Your S3 bucket name | `my-file-upload-bucket` | Yes |
+| `UPLOADFOLDER` | Upload path prefix (must end with `/`) | `uploads/` | Yes |
+| `FILENAMESEP` | Separator between random prefix and filename | `----` | Yes |
+| `REGION` | AWS region of your S3 bucket | `us-west-2` | Yes |
+| `ALLOWED_ORIGIN` | CORS allowed origin | `*` (dev) or `https://example.com` (prod) | Yes |
+| `ACCESSKEYID` | IAM user access key from Step 2 | `AKIA...` | Yes* |
+| `SECRETACCESSKEY` | IAM user secret key from Step 2 | `wJal...` | Yes* |
+
+> **\*Note**: `ACCESSKEYID` and `SECRETACCESSKEY` are only required if you used Option A (IAM User) in Step 2. If you're using an IAM role attached to Lambda, you can omit these.
+
+5. Click **Save** to apply the environment variables
+
+### Configuration Examples
+
+**Development Setup:**
+```
+UPLOADBUCKET=my-upload-bucket
+UPLOADFOLDER=uploads/
+FILENAMESEP=----
+REGION=us-west-2
+ALLOWED_ORIGIN=*
+ACCESSKEYID=AKIAIOSFODNN7EXAMPLE
+SECRETACCESSKEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+```
+
+**Production Setup:**
+```
+UPLOADBUCKET=production-upload-bucket
+UPLOADFOLDER=user-uploads/
+FILENAMESEP=_
+REGION=us-east-1
+ALLOWED_ORIGIN=https://myapp.com
+ACCESSKEYID=AKIAIOSFODNN7EXAMPLE
+SECRETACCESSKEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+```
+
+---
+
+## Step 5: Create API Gateway
+
+The API Gateway exposes your Lambda function so browsers can call it.
+
+### Add API Gateway Trigger
+
+1. In your Lambda function, go to the **Function overview** section
+2. Click **Add trigger**
+3. Select **API Gateway** from the dropdown
+4. Configure the API:
+   - **API type**: HTTP API (simpler and more cost-effective)
+   - **Security**: Open (required for browser access)
+   - Check **CORS** checkbox to enable cross-origin requests
+5. Expand **Additional settings** (optional):
+   - API name will default to `file-upload-function-API`
+   - You can customize this if desired
+6. Click **Add**
+
+### Copy the API Endpoint URL
 
-On the Success page you can see the "Access key ID", and the "Secret access key" for your new User. Copy or save those as you will need them later.
+After creating the trigger:
+
+1. Click on the **API Gateway** trigger in the function overview
+2. You'll see an **API endpoint** URL like:
+   ```
+   https://abc123xyz.execute-api.us-west-2.amazonaws.com/default/file-upload-function
+   ```
+3. **Copy this URL** - you'll need it in Step 7 for frontend configuration
+
+> **Important**: Save this URL somewhere accessible. It's the endpoint your frontend will call to request pre-signed upload URLs.
+
+---
+
+## Step 6: Test Lambda Function (Optional but Recommended)
+
+Testing your Lambda function before frontend integration helps catch configuration issues early.
 
-3. ## Create Lambda Function
+### Create Test Event
 
-Now go to the AWS Lamdba page in the AWS Console. Click "Create Function" to create your new Lambda function.
+1. In your Lambda function, click the **Test** tab
+2. Click **Create new event**
+3. Configure the test event:
+   - **Event name**: `TestUploadRequest`
+   - **Template**: Select `apigateway-aws-proxy`
+4. Replace the event JSON with the following:
 
-Select "Author from scratch", name your new function (we are using "file-upload-function"), and make sure the "Node.js 12.x" Runtime is selected.
+```json
+{
+  "queryStringParameters": {
+    "fileName": "test-file.txt",
+    "contentType": "text/plain"
+  },
+  "requestContext": {
+    "requestId": "test-request-id-123456"
+  }
+}
+```
 
-You can leave the Permissions section with defaults.
+5. Click **Save**
 
-Click the "Create function" button.
+### Run the Test
 
-Once the new function is created, you should have a page with a "Designer pane at the top, and a "Function code" pane below it. In the "Function code" pane, replace the default contents of the index.js file in the editor, with the contents of the index.js file in this GitHub repository: [index.js](https://raw.githubusercontent.com/devondragon/s3-lambda-uploader/master/src/lambda/index.js)
+1. Click the **Test** button
+2. Check the **Execution results** tab
 
-Then you can Save or Deploy.
+### Expected Success Response
 
-4. ## Configure Lamdba Function
+You should see:
+- **Status**: Succeeded (green)
+- **Response body** containing:
+  ```json
+  {
+    "statusCode": 200,
+    "headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"uploadURL\":\"https://...\",\"filename\":\"abc123----test-file.txt\"}"
+  }
+  ```
 
-Now you need to configure your Lambda function. On the next pane down, "Environment variables", click the "Manage environment variables" button.
+The `filename` should have:
+- 6 random characters (from request ID)
+- Your `FILENAMESEP` value (e.g., `----`)
+- The original filename
 
-We are going to add several Environment variables, so just click the Add button as needed to create the following six Key/Value pairs:
+### Troubleshooting Test Failures
 
-    ACCESSKEYID - %The access key id from your User created in Step 2 %
-    SECRETACCESSKEY - %The secret access key from your User created in Step 2 %
-    REGION - %The Region your S3 bucket was created in, e.g. us-west-2 %
-    UPLOADBUCKET - % The Bucket Name, e.g. blackmagic-file-upload-bucket %
-    UPLOADFOLDER - % The name of the path under the Bucket you want the files to go in, e.g. uploads/ The trailing slash is required. %
-    FILENAMESEP - % The seperator string of your choice. This will be used between the random six characters and the original filename for the uploaded object (see examples in the README.md), e.g. ---- %
+If you get errors, check:
+- ✅ All environment variables are set correctly in Step 4
+- ✅ IAM user has correct permissions for your S3 bucket
+- ✅ Bucket name and region match your configuration
+- ✅ `UPLOADFOLDER` ends with a trailing slash (`/`)
+- ✅ Check CloudWatch Logs for detailed error messages
 
-5. ## Create API Gateway
+---
 
-We will want to direct access to our Lambda through the AWS API Gateway, so in the top pane "Designer", click the "Add trigger" button on the left.
+## Step 7: Configure Frontend
 
-Select "API Gateway" as the Trigger type. Then under the API dropdown select "Create an API".
+Now configure the frontend to connect to your Lambda function via API Gateway.
 
-In this case we can use the simpler "HTTP API" type.
+### Option 1: Using the Repository Files
 
-For Security you can select "Open" as it will be being accessed via Javascript from all your end user's browsers.
+If you cloned this repository:
 
-Expand the "Additional Settings" section.
+1. Open `src/frontend/config.js` in a text editor
+2. Replace the `apiEndpoint` value with your API Gateway URL from Step 5:
 
-The API name will be pre-filled with "file-upload-function-API" and there is no reason to change it.
+```javascript
+const CONFIG = {
+  apiEndpoint: 'https://YOUR-API-ID.execute-api.YOUR-REGION.amazonaws.com/default/file-upload-function',
+  maxFileSizeBytes: 100 * 1024 * 1024, // 100MB default
+};
+```
 
-Enabling Cross-origin resource sharing will likely be needed for your use.
+3. Save the file
 
-Finally click the "Add" button to create the API Gateway.
+### Option 2: Integrating into Your Own Website
 
-6. ## Test Lambda Function
+Copy these files from `src/frontend/` to your project:
+- `config.js` (edit with your API endpoint)
+- `upload.js` (modern vanilla JavaScript, no dependencies)
+- `upload.css` (optional styling)
+- `upload.html` (reference implementation)
 
-It can be helpful to configure a test event to allow you to easily test your Lamdba function from the AWS Console.
+Update your HTML to include:
+```html
+<script src="config.js"></script>
+<script src="upload.js"></script>
+<link rel="stylesheet" href="upload.css">
+```
 
-Click on your Lambda function to return to the main Lamdba function page. In the "Function code" pane, click the dropdown arrow icon next to "Test", and select "Configure Events".
+---
 
-Select "Create new test event" and under the "Event template" dropdown find the "apigateway-aws-proxy" option which is under the "AWS" section.
+## Step 8: Test End-to-End Upload
 
-Name the event in the "Event name" field. For this tutorial we are using the name "TestAPIEvent".
+### Test the Upload Flow
 
-Replace line 8, which should be ""foo": "bar"" with the following:
+1. Open `src/frontend/upload.html` in your web browser
+   - For local testing: `file:///path/to/src/frontend/upload.html`
+   - Or host on any web server (static hosting, localhost, etc.)
 
-    "fileName": "testFileName",
-    "contentType": "text/html"
+2. Click **Choose File** and select a test file
 
-Now click the "Create" button to create your test event.
+3. Click **Upload**
 
-Now you can click the "Test" button, and you should see success or failure, and execution result detail at the top of the page, as well as response data below the code editor.
+### Expected Behavior
 
-You should see a Success, with response statusCode 200, and with a JSON response body with two variables inside, an uploadURL which will be a long AWS S3 URL, and a filename, which should have six random characters, followed by the FILENAMESEP string you configured in step 4, followed by "testFileName".
+✅ **Success indicators:**
+- Progress bar appears and fills (may be quick for small files)
+- "Upload Complete!" message appears
+- File is in your S3 bucket in the `UPLOADFOLDER` path
 
-If you are getting errors instead, you will need to dive in and figure out what is going wrong.
+✅ **Check S3 bucket:**
+- Navigate to your S3 bucket in AWS Console
+- Open the folder you specified (e.g., `uploads/`)
+- You should see your file with the format: `abc123----yourfilename.ext`
 
-7. ## Add API Gateway URL into client side Javascript
+### Troubleshooting Upload Issues
 
-If you click on the purple iconed "API Gateway" trigger item on the left side fo the "Designer" pane at the top of the page, you should get a new "API Gateway" pane below. If you expand the "Details" section, you should see an "API endpoint". That URL will need to be copied into the upload.js Javascript file as the value of the variable named "getUploadURLURL" on line 15.
+| Issue | Possible Cause | Solution |
+|-------|---------------|----------|
+| CORS error in console | API Gateway CORS not enabled | Ensure CORS is checked in API Gateway trigger |
+| 403 Forbidden | IAM permissions incorrect | Verify IAM user has `s3:PutObject` on bucket |
+| 500 Server Error | Lambda configuration issue | Check CloudWatch logs for Lambda errors |
+| File size limit error | File too large | Adjust `maxFileSizeBytes` in config.js |
+| Network error | Wrong API endpoint | Verify API Gateway URL in config.js |
 
-8. ## Get HTML Form Upload Working
+### View CloudWatch Logs
 
-If you clone this repo you can just use the upload.html and upload.js files as a starting place. You will need to edit the upload.js file, and put in the API Endpoint URL from the last step in on line 15 as the value of the variable "getUploadURLURL".
+If uploads fail:
+1. Go to **CloudWatch** → **Log groups** in AWS Console
+2. Find `/aws/lambda/file-upload-function`
+3. Check recent log streams for error details
 
-Then load the upload.html file in your web browser. Click "Choose File", select a file, and then click the "Upload" button.
+---
 
-If all goes well you should see a green progress bar (which might move too fast to see if you are uploading a small file), and then an "Upload Complete!" success message when the upload is done.
+## 🎉 Congratulations!
 
-In your S3 Bucket you should see the upload folder name you configured in step 4. Like this:
+You've successfully set up a serverless file upload system!
 
-![Uploaded Files](https://p198.p4.n0.cdn.getcloudapp.com/items/P8uyvZQg/by%20default%202020-09-26%20at%204.21.18%20PM.png?v=5ce689a6a4400e9647e7d80fbfbf5ea2 "Uploaded Files")
+### What You've Built
 
-Congratulations!!
+- ✅ Direct browser-to-S3 file uploads
+- ✅ Serverless architecture that scales automatically
+- ✅ Secure pre-signed URLs with time limits
+- ✅ Collision-resistant filename handling
+- ✅ Modern, accessible user interface
+
+### Next Steps
+
+**For Production Use:**
+1. **Security**: Change `ALLOWED_ORIGIN` from `*` to your specific domain
+2. **S3 CORS**: Update S3 CORS to allow only your domain
+3. **IAM Role**: Consider using Lambda execution roles instead of access keys
+4. **Monitoring**: Set up CloudWatch alerts for Lambda errors
+5. **Validation**: Add file type restrictions if needed
+6. **Costs**: Review AWS pricing for Lambda, API Gateway, and S3
+
+**Customization:**
+- Adjust file size limits in `config.js`
+- Modify upload UI styling in `upload.css`
+- Add custom validation logic in `upload.js`
+- Implement post-upload processing (Lambda triggers on S3 events)
+
+### Need Help?
+
+- 📖 Review the [README.md](README.md) for architecture details
+- 🐛 Check [GitHub Issues](https://github.com/devondragon/s3-lambda-uploader/issues)
+- 📚 Consult [AWS Documentation](https://aws.amazon.com/documentation/)
+
+**Happy uploading!** 🚀
