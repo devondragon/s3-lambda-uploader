@@ -11,6 +11,8 @@ const s3 = new AWS.S3();
 
 const uploadBucket = process.env.UPLOADBUCKET;
 const uploadFolder = process.env.UPLOADFOLDER;
+// CORS origin - defaults to "*" for backward compatibility, but should be set to specific domain
+const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
 
 // Validate required environment variables
 const validateEnvironment = () => {
@@ -56,7 +58,7 @@ exports.handler = async (event, context) => {
     return {
       statusCode: 500,
       headers: {
-        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Origin": allowedOrigin,
       },
       body: JSON.stringify({
         error: 'Server configuration error',
@@ -119,7 +121,7 @@ const getUploadURL = async function (event, context) {
       statusCode: 200,
       isBase64Encoded: false,
       headers: {
-        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Origin": allowedOrigin,
       },
       body: JSON.stringify({
         uploadURL: uploadURL,
@@ -132,7 +134,7 @@ const getUploadURL = async function (event, context) {
       statusCode: 500,
       isBase64Encoded: false,
       headers: {
-        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Origin": allowedOrigin,
       },
       body: JSON.stringify({
         error: "Failed to generate upload URL",
