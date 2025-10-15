@@ -12,8 +12,58 @@ const s3 = new AWS.S3();
 const uploadBucket = process.env.UPLOADBUCKET;
 const uploadFolder = process.env.UPLOADFOLDER;
 
+// Validate required environment variables
+const validateEnvironment = () => {
+  const required = ['UPLOADBUCKET', 'UPLOADFOLDER', 'FILENAMESEP'];
+  const missing = required.filter(key => !process.env[key]);
+  if (missing.length > 0) {
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  }
+};
+
+// Sanitize filename to prevent path traversal and remove dangerous characters
+const sanitizeFilename = (filename) => {
+  if (!filename || typeof filename !== 'string') {
+    return null;
+  }
+
+  // Remove path traversal attempts
+  let sanitized = filename.replace(/\.\./g, '');
+
+  // Remove or replace dangerous characters (keep alphanumeric, dots, dashes, underscores)
+  sanitized = sanitized.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+  // Remove leading/trailing dots and spaces
+  sanitized = sanitized.trim().replace(/^\.+|\.+$/g, '');
+
+  // Limit length to 255 characters (common filesystem limit)
+  if (sanitized.length > 255) {
+    const ext = sanitized.substring(sanitized.lastIndexOf('.'));
+    sanitized = sanitized.substring(0, 255 - ext.length) + ext;
+  }
+
+  return sanitized || null;
+};
+
 exports.handler = async (event, context) => {
   console.log(event);
+
+  // Validate environment on cold start
+  try {
+    validateEnvironment();
+  } catch (error) {
+    console.error('Environment validation failed:', error);
+    return {
+      statusCode: 500,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+      },
+      body: JSON.stringify({
+        error: 'Server configuration error',
+      }),
+    };
+  }
+
   const result = await getUploadURL(event, context);
   console.log("Result: ", result);
   return result;
@@ -45,7 +95,13 @@ const getUploadURL = async function (event, context) {
   if (typeof fileName == "undefined" || fileName == null || fileName == "") {
     fileName = actionId;
   } else {
-    fileName = randomString + fileNameSep + fileName;
+    // Sanitize the filename to prevent security issues
+    const sanitized = sanitizeFilename(fileName);
+    if (!sanitized) {
+      fileName = actionId; // Fall back to actionId if sanitization results in empty string
+    } else {
+      fileName = randomString + fileNameSep + sanitized;
+    }
   }
 
   var s3Params = {
