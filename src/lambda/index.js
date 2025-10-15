@@ -82,12 +82,15 @@ const getUploadURL = async function (event, context) {
     let actionId = context.awsRequestId;
     let randomString = actionId.slice(-6); // Get last 6 characters
 
+    let contentType;
+    let fileName;
+
     if (
       typeof event.queryStringParameters !== "undefined" &&
       event.queryStringParameters != null
     ) {
-      var contentType = event.queryStringParameters.contentType;
-      var fileName = event.queryStringParameters.fileName;
+      contentType = event.queryStringParameters.contentType;
+      fileName = event.queryStringParameters.fileName;
     }
     let fileNameSep = process.env.FILENAMESEP;
 
